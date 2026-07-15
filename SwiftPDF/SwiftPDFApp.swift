@@ -6,27 +6,68 @@
 //
 
 import SwiftUI
-import SwiftData
+#if canImport(AppTrackingTransparency) && os(iOS)
+import AppTrackingTransparency
+#endif
 
 @main
 struct SwiftPDFApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var adService = AdMobService()
+    @State private var isContentReady = false
+    @State private var isPreparingAdvertising = false
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if isContentReady {
+                    ContentView()
+                        .environmentObject(adService)
+                } else {
+                    LaunchPreparationView()
+                }
+            }
+            .onChange(of: scenePhase, initial: true) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task { await prepareAdvertisingAndShowContent() }
+            }
         }
-        .modelContainer(sharedModelContainer)
+    }
+
+    @MainActor
+    private func prepareAdvertisingAndShowContent() async {
+        guard !isContentReady, !isPreparingAdvertising else { return }
+        isPreparingAdvertising = true
+        defer { isPreparingAdvertising = false }
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        guard scenePhase == .active else { return }
+
+        await requestTrackingPermissionIfNeeded()
+        adService.configure()
+        isContentReady = true
+    }
+
+    private func requestTrackingPermissionIfNeeded() async {
+        #if canImport(AppTrackingTransparency) && os(iOS)
+        guard #available(iOS 14, *) else { return }
+        guard ATTrackingManager.trackingAuthorizationStatus == .notDetermined else { return }
+        _ = await ATTrackingManager.requestTrackingAuthorization()
+        #endif
+    }
+}
+
+private struct LaunchPreparationView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "doc.text.fill")
+                .font(.system(size: 54, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+
+            ProgressView()
+                .accessibilityLabel("Preparing SwiftPDF")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
     }
 }

@@ -1,0 +1,95 @@
+{
+  "identifier" : "5A1B7F00-0000-4A00-8000-000000000001",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "19.99",
+      "familyShareable" : false,
+      "internalID" : "5A1B7F00-0000-4A00-8000-000000000002",
+      "localizations" : [
+        {
+          "description" : "Unlock every SwiftPDF Pro feature for life, with a single purchase.",
+          "displayName" : "SwiftPDF Pro Lifetime",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "JimWas.SwiftPDF.pro.lifetime",
+      "referenceName" : "Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "0",
+    "_developerTeamID" : "0",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "5A1B7F00-0000-4A00-8000-000000000010",
+      "localizations" : [
+        {
+          "description" : "Unlock every SwiftPDF Pro feature.",
+          "displayName" : "SwiftPDF Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "SwiftPDF Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "5A1B7F00-0000-4A00-8000-000000000011",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Monthly access to every SwiftPDF Pro feature.",
+              "displayName" : "SwiftPDF Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "JimWas.SwiftPDF.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pro Monthly",
+          "subscriptionGroupID" : "5A1B7F00-0000-4A00-8000-000000000010",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "29.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "5A1B7F00-0000-4A00-8000-000000000012",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Annual access to every SwiftPDF Pro feature. Best value.",
+              "displayName" : "SwiftPDF Pro Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "JimWas.SwiftPDF.pro.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Pro Annual",
+          "subscriptionGroupID" : "5A1B7F00-0000-4A00-8000-000000000010",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
