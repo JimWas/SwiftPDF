@@ -120,8 +120,8 @@ private struct OnboardingPage {
             symbol: "signature",
             color: .purple,
             title: "Sign Documents",
-            detail: "Open the signature library, draw your signature once, then tap it whenever you want to place it on a PDF.",
-            tips: ["One saved signature is included free", "Pro supports unlimited saved signatures"]
+            detail: "Open the signature library, then draw a signature or type a signer name and choose a writing style. Tap a saved signature whenever you want to place it on a PDF.",
+            tips: ["Choose a different style for each signer", "Pro supports unlimited saved signatures"]
         ),
         OnboardingPage(
             symbol: "doc.viewfinder",

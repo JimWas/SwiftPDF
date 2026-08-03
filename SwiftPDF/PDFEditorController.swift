@@ -449,12 +449,7 @@ final class PDFEditorController: ObservableObject {
     func addSignatureToPage(_ signature: SavedSignature) {
         syncCurrentDrawing()
 
-        let sigDrawing = signature.drawing
-        let sigBounds = sigDrawing.bounds
-        guard !sigBounds.isEmpty else { return }
-
-        let paddedBounds = sigBounds.insetBy(dx: -12, dy: -12)
-        let signatureImage = sigDrawing.image(from: paddedBounds, scale: 3)
+        guard let signatureImage = signature.renderedImage else { return }
         addImageToPage(signatureImage, label: "Signature", widthRatio: 0.42)
         isDrawingActive = false
     }

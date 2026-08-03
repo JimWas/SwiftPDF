@@ -84,7 +84,7 @@ struct PaywallView: View {
         VStack(alignment: .leading, spacing: 16) {
             FeatureRow(icon: "nosign", title: "No Ads", subtitle: "Remove all banners and interstitials.")
             FeatureRow(icon: "text.viewfinder", title: "Unlimited OCR", subtitle: "Extract text from as many pages as you want.")
-            FeatureRow(icon: "signature", title: "Unlimited Signatures", subtitle: "Save all your signatures and initials.")
+            FeatureRow(icon: "signature", title: "Unlimited Signatures", subtitle: "Save drawn signatures or names in distinct writing styles.")
             FeatureRow(icon: "lock.shield", title: "Password Protection", subtitle: "Secure your PDFs when you export.")
             FeatureRow(icon: "square.grid.2x2", title: "Advanced Management", subtitle: "Combine and reorder pages without limits.")
             FeatureRow(icon: "wand.and.stars", title: "Premium PDF Tools", subtitle: "Convert images, create Markdown, repair, unlock, and protect PDFs.")

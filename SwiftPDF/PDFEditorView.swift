@@ -1164,12 +1164,22 @@ struct SignatureLibraryView: View {
                                 controller.addSignatureToPage(signature)
                                 dismiss()
                             } label: {
-                                Image(uiImage: signature.drawing.image(from: signature.drawing.bounds, scale: 2.0))
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(height: 80)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 8)
+                                VStack(spacing: 6) {
+                                    if let image = signature.renderedImage {
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(height: 72)
+                                            .frame(maxWidth: .infinity)
+                                    }
+
+                                    if let style = signature.fontStyle {
+                                        Text(style.rawValue)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.vertical, 8)
                             }
                         }
                         .onDelete { offsets in
@@ -1210,39 +1220,68 @@ struct SignatureLibraryView: View {
     }
 }
 
+private enum SignatureCreationMode: String, CaseIterable, Identifiable {
+    case draw = "Draw"
+    case type = "Type"
+
+    var id: Self { self }
+}
+
 struct SignaturePadView: View {
     @ObservedObject var controller: PDFEditorController
     @State private var drawing = PKDrawing()
+    @State private var mode: SignatureCreationMode = .draw
+    @State private var typedName = ""
+    @State private var selectedFontStyle: SignatureFontStyle = .classic
+    @FocusState private var nameFieldFocused: Bool
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
         NavigationStack {
-            VStack {
-                Text("Sign below")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.top)
+            VStack(spacing: 16) {
+                Picker("Signature method", selection: $mode) {
+                    ForEach(SignatureCreationMode.allCases) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.top)
 
-                PKCanvasViewWrapper(drawing: $drawing)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(12)
-                    .padding()
+                if mode == .draw {
+                    Text("Sign below")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    PKCanvasViewWrapper(drawing: $drawing)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal)
+                } else {
+                    typedSignatureEditor
+                }
 
                 HStack(spacing: 40) {
                     Button("Clear") {
-                        drawing = PKDrawing()
+                        clearCurrentSignature()
                     }
                     .foregroundStyle(.red)
 
                     Button("Save Signature") {
-                        if !drawing.strokes.isEmpty {
+                        if mode == .draw, !drawing.strokes.isEmpty {
                             controller.signatureStore.add(drawing: drawing)
+                            dismiss()
+                        } else if mode == .type {
+                            controller.signatureStore.addTyped(
+                                name: typedName,
+                                style: selectedFontStyle
+                            )
                             dismiss()
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(drawing.strokes.isEmpty)
+                    .disabled(!canSaveSignature)
                 }
                 .padding(.bottom, 30)
             }
@@ -1253,6 +1292,106 @@ struct SignaturePadView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+        }
+    }
+
+    private var typedSignatureEditor: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                TextField("Signer name", text: $typedName)
+                    .font(.title3)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .focused($nameFieldFocused)
+                    .padding(14)
+                    .background(
+                        Color(.secondarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 12)
+                    )
+
+                VStack(spacing: 8) {
+                    Text(typedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Your Name" : typedName)
+                        .font(selectedFontStyle.swiftUIFont(size: selectedFontStyle == .flourish ? 34 : 46))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.45)
+                        .frame(maxWidth: .infinity, minHeight: 110)
+
+                    Text(selectedFontStyle.rawValue)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(16)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+
+                Text("Choose a Signature Style")
+                    .font(.headline)
+
+                LazyVGrid(
+                    columns: [GridItem(.flexible()), GridItem(.flexible())],
+                    spacing: 12
+                ) {
+                    ForEach(SignatureFontStyle.allCases) { style in
+                        Button {
+                            selectedFontStyle = style
+                        } label: {
+                            VStack(spacing: 6) {
+                                Text(typedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Your Name" : typedName)
+                                    .font(style.swiftUIFont(size: style == .flourish ? 18 : 25))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.45)
+                                    .frame(maxWidth: .infinity, minHeight: 42)
+
+                                Text(style.rawValue)
+                                    .font(.caption2.weight(.semibold))
+                            }
+                            .foregroundStyle(.primary)
+                            .padding(12)
+                            .background(
+                                selectedFontStyle == style
+                                    ? Color.accentColor.opacity(0.16)
+                                    : Color(.secondarySystemBackground),
+                                in: RoundedRectangle(cornerRadius: 12)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(
+                                        selectedFontStyle == style ? Color.accentColor : Color.clear,
+                                        lineWidth: 2
+                                    )
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(style.rawValue) signature style")
+                        .accessibilityAddTraits(selectedFontStyle == style ? .isSelected : [])
+                    }
+                }
+
+                Text("Each saved typed signature keeps its selected name and style. Choose a different style for each signer.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal)
+        }
+        .onAppear { nameFieldFocused = true }
+    }
+
+    private var canSaveSignature: Bool {
+        switch mode {
+        case .draw:
+            !drawing.strokes.isEmpty
+        case .type:
+            !typedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private func clearCurrentSignature() {
+        switch mode {
+        case .draw:
+            drawing = PKDrawing()
+        case .type:
+            typedName = ""
+            nameFieldFocused = true
         }
     }
 }
