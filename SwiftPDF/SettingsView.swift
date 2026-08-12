@@ -101,7 +101,7 @@ struct SettingsView: View {
                 Label("Manage Subscriptions", systemImage: "creditcard")
             }
 
-            Text("Pro removes ads and unlocks unlimited OCR, unlimited drawn and typed signatures, distinct signature styles, password protection, JPG conversion, PDF to Markdown, repair, unlock, and advanced document tools.")
+            Text("Pro removes ads and unlocks advanced text and date correction, font identification, unlimited OCR, unlimited drawn and typed signatures, password protection, JPG conversion, PDF to Markdown, repair, unlock, and advanced document tools.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

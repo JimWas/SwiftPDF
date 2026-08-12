@@ -40,7 +40,7 @@ struct EditorView: View {
     @State private var pdfPassword = ""
     @State private var showingPasswordEntry = false
     @State private var showingPageSelector = false
-    @State private var showingMoreActions = false
+    @State private var showsCanvasControls = true
 
     var body: some View {
         editorCanvas
@@ -52,8 +52,8 @@ struct EditorView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Close", action: onClose)
                 }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    editorToolbarButtons
+                ToolbarItem(placement: .topBarTrailing) {
+                    editorMenu
                 }
             }
             .editorSheetsAndDialogs(
@@ -75,13 +75,11 @@ struct EditorView: View {
                 showSaveScopeOptions: $showSaveScopeOptions,
                 showSaveOptions: $showSaveOptions,
                 exportCurrentPageOnly: $exportCurrentPageOnly,
-                showingMoreActions: $showingMoreActions,
                 commitText: commitText,
                 shareLastExport: shareLastExport,
                 handleSuccessfulSave: handleSuccessfulSave,
                 presentExportError: presentExportError,
-                saveSignedPDF: saveSignedPDF,
-                clearDrawing: clearDrawing
+                saveSignedPDF: saveSignedPDF
             )
             .alert(item: $controller.fontIdentificationResult) { result in
                 if !result.matchFound {
@@ -113,7 +111,30 @@ struct EditorView: View {
             }
                 .ignoresSafeArea()
 
-            VStack(spacing: 12) {
+            if isUsingTextTool {
+                Button(action: closeTextTool) {
+                    Label("Close Text Tool", systemImage: "xmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 44)
+                        .background(
+                            Capsule()
+                                .fill(Color.red)
+                                .shadow(color: Color.black.opacity(0.2), radius: 9, x: 0, y: 5)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close Text Tool")
+                .padding(.trailing, 20)
+                .padding(.top, 14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(2)
+            }
+
+            if showsCanvasControls {
+                VStack(spacing: 12) {
                 Spacer()
 
                 if controller.activeTool == .correctText {
@@ -141,7 +162,7 @@ struct EditorView: View {
                 if controller.activeTool == .text || controller.activeTool == .correctText {
                     HStack {
                         TextToolPalette(controller: controller)
-                        Spacer(minLength: 112)
+                        Spacer(minLength: 160)
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .padding(.bottom, 86)
@@ -164,86 +185,161 @@ struct EditorView: View {
                     showingPageSelector = true
                 }
                 .padding(.bottom, 22)
+                }
+                .padding(.horizontal, 18)
             }
-            .padding(.horizontal, 18)
 
-            VStack(spacing: 12) {
+            if showsCanvasControls {
+                VStack(alignment: .trailing, spacing: 10) {
                 if controller.isDrawingActive {
-                    DrawingToolPalette(controller: controller)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                }
-
-                Button(action: { controller.showingSignatureLibrary = true }) {
-                    Image(systemName: "signature")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 52, height: 52)
-                        .background(
-                            Circle()
-                                .fill(Color.orange)
-                                .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 6)
+                    HStack(alignment: .bottom, spacing: 10) {
+                        DrawingToolPalette(controller: controller)
+                        EditorActionButton(
+                            title: "Finish Drawing",
+                            systemImage: "checkmark",
+                            color: .accentColor,
+                            action: toggleDrawing
                         )
+                    }
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else {
+                    EditorActionButton(title: "Signature", systemImage: "signature", color: .orange) {
+                        controller.showingSignatureLibrary = true
+                    }
+                    EditorActionButton(title: "Shapes", systemImage: "square.on.circle", color: .purple) {
+                        controller.showingShapePicker = true
+                    }
+                    EditorActionButton(title: "Save PDF", systemImage: "tray.and.arrow.down", color: .black) {
+                        beginSaveFlow()
+                    }
+                    EditorActionButton(title: "Share PDF", systemImage: "square.and.arrow.up", color: .green) {
+                        shareSignedPDF()
+                    }
+                    EditorActionButton(title: "Draw", systemImage: "pencil.and.outline", color: .accentColor) {
+                        toggleDrawing()
+                    }
                 }
-
-                Button(action: { controller.showingShapePicker = true }) {
-                    Image(systemName: "square.on.circle")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 52, height: 52)
-                        .background(
-                            Circle()
-                                .fill(Color.purple)
-                                .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 6)
-                        )
                 }
-
-                Button(action: beginSaveFlow) {
-                    Image(systemName: "tray.and.arrow.down")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 52, height: 52)
-                        .background(
-                            Circle()
-                                .fill(Color.black)
-                                .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 6)
-                        )
-                }
-
-                Button(action: shareSignedPDF) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 52, height: 52)
-                        .background(
-                            Circle()
-                                .fill(Color.green)
-                                .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 6)
-                        )
-                }
-
-                Button(action: toggleDrawing) {
-                    Image(systemName: controller.isDrawingActive ? "checkmark" : "pencil.and.outline")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 52, height: 52)
-                        .background(
-                            Circle()
-                                .fill(Color.accentColor)
-                                .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 6)
-                        )
-                }
+                .animation(.spring(duration: 0.3), value: controller.isDrawingActive)
+                .animation(.spring(duration: 0.3), value: controller.activeTool)
+                .padding(.trailing, 24)
+                .padding(.bottom, 92)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
-            .animation(.spring(duration: 0.3), value: controller.isDrawingActive)
-            .animation(.spring(duration: 0.3), value: controller.activeTool)
-            .padding(.trailing, 24)
-            .padding(.bottom, 28)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
     }
 
-    @ViewBuilder
-    private var editorToolbarButtons: some View {
+    private var editorMenu: some View {
         Menu {
+            Button {
+                withAnimation { showsCanvasControls.toggle() }
+            } label: {
+                Label(
+                    showsCanvasControls ? "Hide Canvas Controls" : "Show Canvas Controls",
+                    systemImage: showsCanvasControls ? "eye.slash" : "eye"
+                )
+            }
+
+            Button(action: toggleDrawing) {
+                Label(
+                    controller.isDrawingActive ? "Finish Drawing" : "Start Drawing",
+                    systemImage: controller.isDrawingActive ? "checkmark" : "pencil.and.outline"
+                )
+            }
+
+            Menu {
+                Button(action: controller.zoomIn) {
+                    Label("Zoom In", systemImage: "plus.magnifyingglass")
+                }
+                Button(action: controller.zoomOut) {
+                    Label("Zoom Out", systemImage: "minus.magnifyingglass")
+                }
+                Button(action: controller.fitPage) {
+                    Label("Fit Page", systemImage: "arrow.up.left.and.arrow.down.right")
+                }
+            } label: {
+                Label("Zoom", systemImage: "magnifyingglass")
+            }
+
+            Menu {
+                textToolButtons
+            } label: {
+                Label("Text Tools", systemImage: "textformat")
+            }
+
+            Divider()
+
+            Button(action: undoStroke) {
+                Label("Undo Drawing Stroke", systemImage: "arrow.uturn.backward")
+            }
+            .disabled(!controller.canUndoCurrentPage())
+
+            if controller.hasSelectedEditableObject {
+                Button(role: .destructive, action: controller.deleteSelectedEditableObject) {
+                    Label("Delete \(controller.selectedEditableObjectLabel)", systemImage: "trash")
+                }
+            }
+
+            Divider()
+
+            Button("Rotate Page") { controller.rotateCurrentPage() }
+            Button("Manage Pages") { controller.showingPageManager = true }
+            Button("Add Image") { controller.showingImagePicker = true }
+            Button(pdfPassword.isEmpty ? "Protect with Password" : "Change Password") {
+                if ProManager.shared.isPro {
+                    showingPasswordEntry = true
+                } else {
+                    controller.showingPaywall = true
+                }
+            }
+            Button("Batch Watermark") {
+                if ProManager.shared.isPro {
+                    controller.showingWatermarkEditor = true
+                } else {
+                    controller.showingPaywall = true
+                }
+            }
+            Button("Autofill Form") {
+                if ProManager.shared.isPro {
+                    controller.smartAutofill()
+                } else {
+                    controller.showingPaywall = true
+                }
+            }
+            Button("Edit Autofill Profile") { controller.showingProfileEditor = true }
+            Button("Extract Text with OCR") { controller.performOCR() }
+                .disabled(controller.isPerformingOCR)
+            if controller.hasDrawingOnCurrentPage() {
+                Button("Clear Drawing", role: .destructive, action: clearDrawing)
+            }
+            Button("Delete Page", role: .destructive) { controller.deleteCurrentPage() }
+
+            Divider()
+
+            Button(action: shareSignedPDF) {
+                Label("Share PDF", systemImage: "square.and.arrow.up")
+            }
+        } label: {
+            Label("Editor Menu", systemImage: "ellipsis.circle")
+                .labelStyle(.titleAndIcon)
+        }
+        .accessibilityLabel("Editor Menu")
+    }
+
+    private var isUsingTextTool: Bool {
+        controller.activeTool == .text || controller.activeTool == .correctText || controller.activeTool == .identifyFont
+    }
+
+    private func closeTextTool() {
+        pendingTextTarget = nil
+        showTextInput = false
+        controller.isIdentifyingFont = false
+        controller.fontIdentificationResult = nil
+        controller.setTool(.draw)
+    }
+
+    @ViewBuilder
+    private var textToolButtons: some View {
             Button {
                 controller.setTool(.text)
             } label: {
@@ -251,16 +347,30 @@ struct EditorView: View {
             }
 
             Button {
-                controller.setTool(.correctText)
+                if ProManager.shared.isPro {
+                    controller.setTool(.correctText)
+                } else {
+                    controller.showingPaywall = true
+                }
             } label: {
-                Label("Correct Text or Date", systemImage: "text.badge.checkmark")
+                Label(
+                    "Correct Text or Date",
+                    systemImage: ProManager.shared.isPro ? "text.badge.checkmark" : "lock.fill"
+                )
             }
 
 
             Button {
-                controller.setTool(.identifyFont)
+                if ProManager.shared.isPro {
+                    controller.setTool(.identifyFont)
+                } else {
+                    controller.showingPaywall = true
+                }
             } label: {
-                Label("Identify Font", systemImage: "text.magnifyingglass")
+                Label(
+                    "Identify Font",
+                    systemImage: ProManager.shared.isPro ? "text.magnifyingglass" : "lock.fill"
+                )
             }
 
             if controller.activeTool == .text || controller.activeTool == .correctText || controller.activeTool == .identifyFont {
@@ -268,37 +378,6 @@ struct EditorView: View {
                     controller.setTool(.draw)
                 }
             }
-        } label: {
-            Image(systemName: controller.activeTool == .identifyFont ? "text.magnifyingglass" : controller.activeTool == .correctText ? "text.badge.checkmark" : controller.activeTool == .text ? "text.cursor" : "textformat")
-        }
-        .foregroundStyle(controller.activeTool == .text || controller.activeTool == .correctText || controller.activeTool == .identifyFont ? Color.accentColor : .primary)
-        .accessibilityLabel("Text Tools")
-
-        Button(role: .destructive, action: controller.deleteSelectedEditableObject) {
-            Image(systemName: "trash")
-        }
-        .disabled(!controller.hasSelectedEditableObject)
-
-        Button(action: undoStroke) {
-            Image(systemName: "arrow.uturn.backward")
-        }
-        .disabled(!controller.canUndoCurrentPage())
-
-        Button {
-            showingMoreActions = true
-        } label: {
-            if controller.isPerformingOCR {
-                ProgressView()
-                    .controlSize(.small)
-            } else {
-                Image(systemName: "ellipsis.circle")
-            }
-        }
-        .disabled(controller.isPerformingOCR)
-
-        Button(action: shareSignedPDF) {
-            Image(systemName: "square.and.arrow.up")
-        }
     }
 
     private func toggleDrawing() {
@@ -505,13 +584,11 @@ private extension View {
         showSaveScopeOptions: Binding<Bool>,
         showSaveOptions: Binding<Bool>,
         exportCurrentPageOnly: Binding<Bool>,
-        showingMoreActions: Binding<Bool>,
         commitText: @escaping () -> Void,
         shareLastExport: @escaping () -> Void,
         handleSuccessfulSave: @escaping (URL, String) -> Void,
         presentExportError: @escaping (String) -> Void,
-        saveSignedPDF: @escaping (Bool) -> Void,
-        clearDrawing: @escaping () -> Void
+        saveSignedPDF: @escaping (Bool) -> Void
     ) -> some View {
         modifier(EditorSheetsAndDialogsModifier(
             controller: controller,
@@ -532,13 +609,11 @@ private extension View {
             showSaveScopeOptions: showSaveScopeOptions,
             showSaveOptions: showSaveOptions,
             exportCurrentPageOnly: exportCurrentPageOnly,
-            showingMoreActions: showingMoreActions,
             commitText: commitText,
             shareLastExport: shareLastExport,
             handleSuccessfulSave: handleSuccessfulSave,
             presentExportError: presentExportError,
-            saveSignedPDF: saveSignedPDF,
-            clearDrawing: clearDrawing
+            saveSignedPDF: saveSignedPDF
         ))
     }
 }
@@ -562,13 +637,11 @@ private struct EditorSheetsAndDialogsModifier: ViewModifier {
     @Binding var showSaveScopeOptions: Bool
     @Binding var showSaveOptions: Bool
     @Binding var exportCurrentPageOnly: Bool
-    @Binding var showingMoreActions: Bool
     let commitText: () -> Void
     let shareLastExport: () -> Void
     let handleSuccessfulSave: (URL, String) -> Void
     let presentExportError: (String) -> Void
     let saveSignedPDF: (Bool) -> Void
-    let clearDrawing: () -> Void
 
     func body(content: Content) -> some View {
         content
@@ -599,14 +672,10 @@ private struct EditorSheetsAndDialogsModifier: ViewModifier {
             )
             .editorActionDialogs(
                 controller: controller,
-                showingMoreActions: $showingMoreActions,
                 showSaveScopeOptions: $showSaveScopeOptions,
                 showSaveOptions: $showSaveOptions,
                 exportCurrentPageOnly: $exportCurrentPageOnly,
-                showingPasswordEntry: $showingPasswordEntry,
-                pdfPassword: $pdfPassword,
-                saveSignedPDF: saveSignedPDF,
-                clearDrawing: clearDrawing
+                saveSignedPDF: saveSignedPDF
             )
     }
 }
@@ -767,24 +836,12 @@ private extension View {
 
     func editorActionDialogs(
         controller: PDFEditorController,
-        showingMoreActions: Binding<Bool>,
         showSaveScopeOptions: Binding<Bool>,
         showSaveOptions: Binding<Bool>,
         exportCurrentPageOnly: Binding<Bool>,
-        showingPasswordEntry: Binding<Bool>,
-        pdfPassword: Binding<String>,
-        saveSignedPDF: @escaping (Bool) -> Void,
-        clearDrawing: @escaping () -> Void
+        saveSignedPDF: @escaping (Bool) -> Void
     ) -> some View {
         self
-            .confirmationDialog("More Actions", isPresented: showingMoreActions, titleVisibility: .visible) {
-                moreActionButtons(
-                    controller: controller,
-                    showingPasswordEntry: showingPasswordEntry,
-                    pdfPassword: pdfPassword,
-                    clearDrawing: clearDrawing
-                )
-            }
             .confirmationDialog("Save Pages", isPresented: showSaveScopeOptions, titleVisibility: .visible) {
                 Button("All Pages") {
                     exportCurrentPageOnly.wrappedValue = false
@@ -805,46 +862,6 @@ private extension View {
                     saveSignedPDF: saveSignedPDF
                 )
             }
-    }
-
-    @ViewBuilder
-    private func moreActionButtons(
-        controller: PDFEditorController,
-        showingPasswordEntry: Binding<Bool>,
-        pdfPassword: Binding<String>,
-        clearDrawing: @escaping () -> Void
-    ) -> some View {
-        Button("Rotate Page") { controller.rotateCurrentPage() }
-        Button("Manage Pages") { controller.showingPageManager = true }
-        Button("Add Image") { controller.showingImagePicker = true }
-        Button(pdfPassword.wrappedValue.isEmpty ? "Protect with Password" : "Change Password") {
-            if ProManager.shared.isPro {
-                showingPasswordEntry.wrappedValue = true
-            } else {
-                controller.showingPaywall = true
-            }
-        }
-        Button("Batch Watermark") {
-            if ProManager.shared.isPro {
-                controller.showingWatermarkEditor = true
-            } else {
-                controller.showingPaywall = true
-            }
-        }
-        Button("Autofill Form") {
-            if ProManager.shared.isPro {
-                controller.smartAutofill()
-            } else {
-                controller.showingPaywall = true
-            }
-        }
-        Button("Edit Autofill Profile") { controller.showingProfileEditor = true }
-        Button("Extract Text (OCR)") { controller.performOCR() }
-        if controller.hasDrawingOnCurrentPage() {
-            Button("Clear Drawing", role: .destructive, action: clearDrawing)
-        }
-        Button("Delete Page", role: .destructive) { controller.deleteCurrentPage() }
-        Button("Cancel", role: .cancel) {}
     }
 
     @ViewBuilder
@@ -898,6 +915,30 @@ struct TextTarget {
 
     var initialText: String {
         annotation?.contents ?? sourceText ?? ""
+    }
+}
+
+private struct EditorActionButton: View {
+    let title: String
+    let systemImage: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 15)
+                .frame(minWidth: 112, minHeight: 44, alignment: .leading)
+                .background(
+                    Capsule()
+                        .fill(color)
+                        .shadow(color: Color.black.opacity(0.2), radius: 9, x: 0, y: 5)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
 
@@ -1941,6 +1982,7 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
     private weak var canvasView: PKCanvasView?
     private var pageObserver: NSObjectProtocol?
     private var scaleObserver: NSObjectProtocol?
+    private var contentOffsetObservation: NSKeyValueObservation?
     private var tapRecognizer: UITapGestureRecognizer?
     private var objectTapRecognizer: UITapGestureRecognizer?
     private var shapePanRecognizer: UIPanGestureRecognizer?
@@ -1964,6 +2006,7 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
     deinit {
         if let pageObserver { NotificationCenter.default.removeObserver(pageObserver) }
         if let scaleObserver { NotificationCenter.default.removeObserver(scaleObserver) }
+        contentOffsetObservation?.invalidate()
     }
 
     func attach(to view: PDFSigningView) {
@@ -1999,6 +2042,15 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
         }
         parent.controller.onSelectTextAnnotation = { [weak self] annotation, pageIndex in
             self?.selectTextAnnotation(annotation, pageIndex: pageIndex)
+        }
+        parent.controller.onZoomIn = { [weak self] in
+            self?.changeZoom(by: 1.35)
+        }
+        parent.controller.onZoomOut = { [weak self] in
+            self?.changeZoom(by: 1 / 1.35)
+        }
+        parent.controller.onFitPage = { [weak self] in
+            self?.fitPage()
         }
         view.onLayout = { [weak self] in
             self?.updateCanvasFrame()
@@ -2040,7 +2092,23 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
             ) { [weak self] _ in
                 self?.updateCanvasFrame()
             }
+
+            if let scrollView = findScrollView(in: pdfView) {
+                contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
+                    DispatchQueue.main.async {
+                        self?.updateCanvasFrame()
+                    }
+                }
+            }
         }
+    }
+
+    private func findScrollView(in view: UIView) -> UIScrollView? {
+        if let scrollView = view as? UIScrollView { return scrollView }
+        for subview in view.subviews {
+            if let scrollView = findScrollView(in: subview) { return scrollView }
+        }
+        return nil
     }
 
     func update(uiView: PDFSigningView, controller: PDFEditorController) {
@@ -2056,7 +2124,7 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
             }
             canvasView.drawing = controller.drawing(forPage: 0)?.drawing ?? PKDrawing()
             DispatchQueue.main.async { [weak self] in
-                self?.lockScale()
+                self?.configureZoomRange(resetToFit: true)
                 self?.updateCanvasFrame()
                 self?.updateImageOverlay()
                 self?.updatePKTool()
@@ -2183,13 +2251,28 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
         }
     }
 
-    private func lockScale() {
+    private func configureZoomRange(resetToFit: Bool) {
         guard let pdfView else { return }
         pdfView.autoScales = true
-        let scale = pdfView.scaleFactor
-        guard scale.isFinite, scale > 0.01 else { return }
-        pdfView.minScaleFactor = scale
-        pdfView.maxScaleFactor = scale
+        let fitScale = pdfView.scaleFactorForSizeToFit
+        guard fitScale.isFinite, fitScale > 0.01 else { return }
+        pdfView.minScaleFactor = fitScale * 0.75
+        pdfView.maxScaleFactor = fitScale * 8
+        if resetToFit {
+            pdfView.scaleFactor = fitScale
+        }
+    }
+
+    private func changeZoom(by multiplier: CGFloat) {
+        guard let pdfView else { return }
+        let target = pdfView.scaleFactor * multiplier
+        pdfView.scaleFactor = min(pdfView.maxScaleFactor, max(pdfView.minScaleFactor, target))
+        updateCanvasFrame()
+    }
+
+    private func fitPage() {
+        configureZoomRange(resetToFit: true)
+        updateCanvasFrame()
     }
 
     @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {

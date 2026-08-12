@@ -114,6 +114,9 @@ final class PDFEditorController: ObservableObject {
     var onDeselectEditableObject: (() -> Void)?
     var onApplyTextStyleToSelectedObject: (() -> Void)?
     var onSelectTextAnnotation: ((PDFAnnotation, Int) -> Void)?
+    var onZoomIn: (() -> Void)?
+    var onZoomOut: (() -> Void)?
+    var onFitPage: (() -> Void)?
 
     struct InsertedImage {
         let id: UUID
@@ -263,6 +266,18 @@ final class PDFEditorController: ObservableObject {
         textBold = result.bold
         textItalic = result.italic
         applyTextStyleToSelectedObject()
+    }
+
+    func zoomIn() {
+        onZoomIn?()
+    }
+
+    func zoomOut() {
+        onZoomOut?()
+    }
+
+    func fitPage() {
+        onFitPage?()
     }
 
     func setDrawingTool(_ tool: DrawingToolType) {

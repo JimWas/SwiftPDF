@@ -19,6 +19,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - Saved signature storage now supports both typed signatures and existing PencilKit drawings.
+- Text and date correction and font identification now require Pro. Basic Add Text remains available without Pro.
+- Consolidated editor overflow controls into one labeled Editor Menu with a clearly named Text Tools submenu.
+- Added visible labels to Signature, Shapes, Save PDF, Share PDF, Draw, and Finish Drawing controls.
+- Restored pinch zoom and page panning with an eight times magnification range.
+- Added Zoom In, Zoom Out, Fit Page, and Hide Canvas Controls commands to the Editor Menu.
+- Added a persistent floating Close Text Tool button for Add Text, Correct Text or Date, and Identify Font modes.
 
 ### Fixed
 

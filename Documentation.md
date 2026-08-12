@@ -174,6 +174,12 @@ To retest ATT on a physical device:
 
 `EditorView` observes the controller and provides the SwiftUI shell. `PDFEditorContainer` bridges SwiftUI to UIKit. Its coordinator synchronizes `PDFView`, `PKCanvasView`, gestures, inserted image overlays, and page changes.
 
+The navigation bar intentionally contains one trailing Editor Menu. Text Tools, page operations, OCR, image insertion, protection, watermarking, autofill, deletion, and sharing live in that menu. Keep the number of top bar items low so SwiftUI does not generate a second automatic overflow menu on compact devices. The primary canvas controls use labeled capsules for Signature, Shapes, Save PDF, Share PDF, and Draw. Drawing mode replaces that stack with the drawing palette and a labeled Finish Drawing control.
+
+PDF zoom is configured by the editor coordinator after a document loads. The minimum scale is slightly below Fit Page and the maximum scale is eight times Fit Page. Pinch gestures use PDFKit directly, while Editor Menu also exposes Zoom In, Zoom Out, and Fit Page. A content offset observation keeps PencilKit and inserted image overlays aligned while the magnified PDF is panned. Canvas controls can be hidden from Editor Menu for an unobstructed page view. Do not restore the former behavior that set the minimum and maximum scales to the same value.
+
+Whenever Add Text, Correct Text or Date, or Identify Font is active, EditorView displays a floating Close Text Tool button independently of the optional canvas controls. Closing a text tool clears pending text input and font identification state, then returns the controller to normal document navigation.
+
 Text Tools includes Add Text and Correct Text or Date. Correction mode uses `PDFPage.selectionForWord(at:)` when selectable text is available. It creates an opaque free text annotation over the source bounds and inserts the replacement. For scanned or flattened pages without selectable text, it creates a movable correction box at the tapped location. Corrections are identified by `correction=1` in the annotation user name and store their background as a hexadecimal `background` value. Both markers must remain intact when text styles change.
 
 Text replacements support the system font plus Helvetica, Arial, Times New Roman, Georgia, Avenir Next, Futura, Courier, Serif, Rounded, and Mono choices. Named fonts use built in iOS fonts and fall back to the system font if a requested face is unavailable.
@@ -268,6 +274,8 @@ Document tools use `LocalDocumentTool.isPremium`. Editor actions check `ProManag
 Current Pro benefits include:
 
 - No ads
+- Text and date correction
+- Embedded and scanned font identification
 - Unlimited OCR
 - Unlimited saved drawn and typed signatures
 - Six typed signature font styles
