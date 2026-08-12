@@ -174,6 +174,12 @@ To retest ATT on a physical device:
 
 `EditorView` observes the controller and provides the SwiftUI shell. `PDFEditorContainer` bridges SwiftUI to UIKit. Its coordinator synchronizes `PDFView`, `PKCanvasView`, gestures, inserted image overlays, and page changes.
 
+Text Tools includes Add Text and Correct Text or Date. Correction mode uses `PDFPage.selectionForWord(at:)` when selectable text is available. It creates an opaque free text annotation over the source bounds and inserts the replacement. For scanned or flattened pages without selectable text, it creates a movable correction box at the tapped location. Corrections are identified by `correction=1` in the annotation user name and store their background as a hexadecimal `background` value. Both markers must remain intact when text styles change.
+
+Text replacements support the system font plus Helvetica, Arial, Times New Roman, Georgia, Avenir Next, Futura, Courier, Serif, Rounded, and Mono choices. Named fonts use built in iOS fonts and fall back to the system font if a requested face is unavailable.
+
+Identify Font first checks the attributed string returned by a selectable PDF word and maps its embedded `UIFont` metadata to the nearest editable family. When text is flattened or scanned, `FontIdentifier` runs Vision OCR on a local page thumbnail, crops the nearest recognized text line, and compares its Vision feature print with rendered regular, bold, italic, and bold italic candidates. Scan results are intentionally presented as a closest match because rasterized documents do not retain authoritative font metadata. No page image or recognized text leaves the device.
+
 ### Exporting and flattening
 
 The main export implementation lives in `PDFExporter` inside `PDFEditorView.swift`.
@@ -182,6 +188,7 @@ The exporter redraws each PDF page and then renders app managed content such as:
 
 - PencilKit strokes
 - Text annotations
+- Text and date corrections with opaque replacement backgrounds
 - Shapes and arrows
 - Inserted images
 - Saved signatures

@@ -12,6 +12,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 import PhotosUI
+import Vision
 import os
 
 struct EditorView: View {
@@ -82,6 +83,24 @@ struct EditorView: View {
                 saveSignedPDF: saveSignedPDF,
                 clearDrawing: clearDrawing
             )
+            .alert(item: $controller.fontIdentificationResult) { result in
+                if !result.matchFound {
+                    return Alert(
+                        title: Text("Font Not Found"),
+                        message: Text("No readable text was found near that spot. Try tapping closer to the center of a word or use a clearer scan."),
+                        dismissButton: .default(Text("OK"))
+                    )
+                }
+                return Alert(
+                    title: Text(result.isEmbeddedFont ? "Font Identified" : "Closest Font Match"),
+                    message: Text(fontIdentificationMessage(result)),
+                    primaryButton: .default(Text("Use This Font")) {
+                        controller.applyFontIdentification(result)
+                        controller.setTool(.correctText)
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
     }
 
     private var editorCanvas: some View {
@@ -89,7 +108,7 @@ struct EditorView: View {
         return ZStack {
             PDFEditorContainer(controller: controller) { target in
                 pendingTextTarget = target
-                textInput = target.annotation?.contents ?? ""
+                textInput = target.initialText
                 showTextInput = true
             }
                 .ignoresSafeArea()
@@ -97,7 +116,29 @@ struct EditorView: View {
             VStack(spacing: 12) {
                 Spacer()
 
-                if controller.activeTool == .text {
+                if controller.activeTool == .correctText {
+                    Label("Tap the text or date you want to replace", systemImage: "text.cursor")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 11)
+                        .background(.regularMaterial, in: Capsule())
+                        .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 6)
+                }
+
+                if controller.activeTool == .identifyFont {
+                    Label(
+                        controller.isIdentifyingFont ? "Comparing fonts on your device" : "Tap the text whose font you want to identify",
+                        systemImage: controller.isIdentifyingFont ? "hourglass" : "text.magnifyingglass"
+                    )
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 11)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 6)
+                    .padding(.bottom, 86)
+                }
+
+                if controller.activeTool == .text || controller.activeTool == .correctText {
                     HStack {
                         TextToolPalette(controller: controller)
                         Spacer(minLength: 112)
@@ -202,10 +243,36 @@ struct EditorView: View {
 
     @ViewBuilder
     private var editorToolbarButtons: some View {
-        Button(action: toggleTextMode) {
-            Image(systemName: controller.activeTool == .text ? "text.cursor" : "textformat")
+        Menu {
+            Button {
+                controller.setTool(.text)
+            } label: {
+                Label("Add Text", systemImage: "textformat")
+            }
+
+            Button {
+                controller.setTool(.correctText)
+            } label: {
+                Label("Correct Text or Date", systemImage: "text.badge.checkmark")
+            }
+
+
+            Button {
+                controller.setTool(.identifyFont)
+            } label: {
+                Label("Identify Font", systemImage: "text.magnifyingglass")
+            }
+
+            if controller.activeTool == .text || controller.activeTool == .correctText || controller.activeTool == .identifyFont {
+                Button("Done Editing Text") {
+                    controller.setTool(.draw)
+                }
+            }
+        } label: {
+            Image(systemName: controller.activeTool == .identifyFont ? "text.magnifyingglass" : controller.activeTool == .correctText ? "text.badge.checkmark" : controller.activeTool == .text ? "text.cursor" : "textformat")
         }
-        .foregroundStyle(controller.activeTool == .text ? Color.accentColor : .primary)
+        .foregroundStyle(controller.activeTool == .text || controller.activeTool == .correctText || controller.activeTool == .identifyFont ? Color.accentColor : .primary)
+        .accessibilityLabel("Text Tools")
 
         Button(role: .destructive, action: controller.deleteSelectedEditableObject) {
             Image(systemName: "trash")
@@ -385,20 +452,23 @@ struct EditorView: View {
         }
     }
 
-    private func toggleTextMode() {
-        if controller.activeTool == .text {
-            controller.setTool(.draw)
-        } else {
-            controller.setTool(.text)
-        }
-    }
-
     private func undoStroke() {
         controller.undoLastStroke()
     }
 
     private func clearDrawing() {
         controller.clearCurrentDrawing()
+    }
+
+    private func fontIdentificationMessage(_ result: FontIdentificationResult) -> String {
+        let style = [result.bold ? "Bold" : nil, result.italic ? "Italic" : nil]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        let styleText = style.isEmpty ? "Regular" : style
+        if result.isEmbeddedFont {
+            return "The PDF reports \(result.detectedName). The closest editable choice is \(result.closestFamily.rawValue), \(styleText), at about \(Int(result.size.rounded())) points."
+        }
+        return "On device visual matching found \(result.closestFamily.rawValue), \(styleText), at about \(Int(result.size.rounded())) points. Scanned text matching is an estimate because the original font data is not stored in the PDF."
     }
 
     private func commitText() {
@@ -591,20 +661,37 @@ private extension View {
             } message: {
                 Text(savedMessage)
             }
-            .alert(pendingTextTarget.wrappedValue?.annotation == nil ? "Add Text" : "Edit Text", isPresented: showTextInput) {
+            .alert(textDialogTitle(for: pendingTextTarget.wrappedValue), isPresented: showTextInput) {
                 TextField("Text", text: textInput)
-                Button(pendingTextTarget.wrappedValue?.annotation == nil ? "Add" : "Save", action: commitText)
+                Button(textDialogButtonTitle(for: pendingTextTarget.wrappedValue), action: commitText)
                 Button("Cancel", role: .cancel) {
                     pendingTextTarget.wrappedValue = nil
                 }
             } message: {
-                Text("Enter text for the spot you tapped. After adding it, drag to move or pinch to resize.")
+                Text(textDialogMessage(for: pendingTextTarget.wrappedValue))
             }
             .alert("Could not export PDF", isPresented: showExportError) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(exportErrorMessage)
             }
+    }
+
+    private func textDialogTitle(for target: TextTarget?) -> String {
+        if target?.mode == .correction { return "Correct Text or Date" }
+        return target?.annotation == nil ? "Add Text" : "Edit Text"
+    }
+
+    private func textDialogButtonTitle(for target: TextTarget?) -> String {
+        if target?.mode == .correction { return "Replace" }
+        return target?.annotation == nil ? "Add" : "Save"
+    }
+
+    private func textDialogMessage(for target: TextTarget?) -> String {
+        if target?.mode == .correction {
+            return "Enter the corrected text or date. The original area will be covered. You can drag or pinch the correction after adding it."
+        }
+        return "Enter text for the spot you tapped. After adding it, drag to move or pinch to resize."
     }
 
     func editorSheets(
@@ -796,10 +883,22 @@ private struct ShareItem: Identifiable {
     let items: [Any]
 }
 
+enum TextEditMode {
+    case addition
+    case correction
+}
+
 struct TextTarget {
     let pageIndex: Int
     let point: CGPoint
     let annotation: PDFAnnotation?
+    let mode: TextEditMode
+    let sourceBounds: CGRect?
+    let sourceText: String?
+
+    var initialText: String {
+        annotation?.contents ?? sourceText ?? ""
+    }
 }
 
 struct PageNavigationControl: View {
@@ -1054,6 +1153,27 @@ struct TextToolPalette: View {
                                         .stroke(Color.white, lineWidth: controller.textColor == color ? 2 : 0)
                                 )
                                 .shadow(radius: 1)
+                        }
+                    }
+
+                    if controller.activeTool == .correctText || controller.selectedEditableObjectLabel == "Correction" {
+                        Divider()
+                            .frame(height: 24)
+
+                        HStack(spacing: 6) {
+                            Text("Background")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            ColorPicker(
+                                "Correction Background",
+                                selection: $controller.correctionBackgroundColor,
+                                supportsOpacity: false
+                            )
+                            .labelsHidden()
+                            .onChange(of: controller.correctionBackgroundColor) {
+                                controller.applyTextStyleToSelectedObject()
+                            }
                         }
                     }
                 }
@@ -1961,8 +2081,8 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
         let drawingActive = controller.isDrawingActive
         pdfView.isUserInteractionEnabled = !drawingActive
         canvasView.isUserInteractionEnabled = drawingActive
-        tapRecognizer?.isEnabled = controller.activeTool == .text
-        objectTapRecognizer?.isEnabled = !drawingActive && controller.activeTool != .text
+        tapRecognizer?.isEnabled = controller.activeTool == .text || controller.activeTool == .correctText || controller.activeTool == .identifyFont
+        objectTapRecognizer?.isEnabled = !drawingActive && controller.activeTool != .text && controller.activeTool != .correctText && controller.activeTool != .identifyFont
         shapePanRecognizer?.isEnabled = !drawingActive
         shapePinchRecognizer?.isEnabled = !drawingActive
         updateImageOverlay()
@@ -2073,16 +2193,113 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
     }
 
     @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
-        guard parent.controller.activeTool == .text else { return }
+        guard parent.controller.activeTool == .text || parent.controller.activeTool == .correctText || parent.controller.activeTool == .identifyFont else { return }
         guard let pdfView, let document = pdfView.document else { return }
         let location = recognizer.location(in: pdfView)
         guard let page = pdfView.page(for: location, nearest: true) else { return }
         let pagePoint = pdfView.convert(location, to: page)
         let pageIndex = document.index(for: page)
+
+        if parent.controller.activeTool == .identifyFont {
+            identifyFont(on: page, at: pagePoint)
+            return
+        }
+
         let existing = page.annotations.first { annotation in
             isSwiftPDFText(annotation) && annotation.bounds.contains(pagePoint)
         }
-        onRequestTextInput(TextTarget(pageIndex: pageIndex, point: pagePoint, annotation: existing))
+
+        if let existing {
+            let mode: TextEditMode = PDFTextAnnotator.isCorrection(existing) ? .correction : .addition
+            onRequestTextInput(
+                TextTarget(
+                    pageIndex: pageIndex,
+                    point: pagePoint,
+                    annotation: existing,
+                    mode: mode,
+                    sourceBounds: nil,
+                    sourceText: nil
+                )
+            )
+            return
+        }
+
+        if parent.controller.activeTool == .correctText {
+            let selection = page.selectionForWord(at: pagePoint)
+            let selectedBounds = selection?.bounds(for: page).standardized
+            let usableBounds = selectedBounds.flatMap { bounds in
+                bounds.isEmpty || !bounds.width.isFinite || !bounds.height.isFinite ? nil : bounds
+            }
+            if let usableBounds {
+                parent.controller.textSize = max(8, min(72, usableBounds.height * 0.9))
+            }
+            onRequestTextInput(
+                TextTarget(
+                    pageIndex: pageIndex,
+                    point: pagePoint,
+                    annotation: nil,
+                    mode: .correction,
+                    sourceBounds: usableBounds,
+                    sourceText: selection?.string
+                )
+            )
+        } else {
+            onRequestTextInput(
+                TextTarget(
+                    pageIndex: pageIndex,
+                    point: pagePoint,
+                    annotation: nil,
+                    mode: .addition,
+                    sourceBounds: nil,
+                    sourceText: nil
+                )
+            )
+        }
+    }
+
+    private func identifyFont(on page: PDFPage, at pagePoint: CGPoint) {
+        if let selection = page.selectionForWord(at: pagePoint),
+           let result = FontIdentifier.embeddedFontResult(from: selection) {
+            parent.controller.fontIdentificationResult = result
+            return
+        }
+
+        guard !parent.controller.isIdentifyingFont else { return }
+        let pageBounds = page.bounds(for: pdfView?.displayBox ?? .mediaBox).standardized
+        guard pageBounds.width > 1, pageBounds.height > 1 else { return }
+        let renderWidth: CGFloat = 1600
+        let renderSize = CGSize(width: renderWidth, height: renderWidth * pageBounds.height / pageBounds.width)
+        let pageImage = page.thumbnail(of: renderSize, for: pdfView?.displayBox ?? .mediaBox)
+        let normalizedPoint = CGPoint(
+            x: (pagePoint.x - pageBounds.minX) / pageBounds.width,
+            y: (pagePoint.y - pageBounds.minY) / pageBounds.height
+        )
+
+        parent.controller.isIdentifyingFont = true
+        Task { [weak self] in
+            let result = await FontIdentifier.scannedFontResult(
+                in: pageImage,
+                near: normalizedPoint,
+                pageHeight: pageBounds.height
+            )
+            guard let self else { return }
+            await MainActor.run {
+                self.parent.controller.isIdentifyingFont = false
+                if let result {
+                    self.parent.controller.fontIdentificationResult = result
+                } else {
+                    self.parent.controller.fontIdentificationResult = FontIdentificationResult(
+                        detectedName: "No readable text found",
+                        closestFamily: .system,
+                        size: self.parent.controller.textSize,
+                        bold: false,
+                        italic: false,
+                        isEmbeddedFont: false,
+                        matchFound: false
+                    )
+                }
+            }
+        }
     }
 
     @objc private func handleObjectTap(_ recognizer: UITapGestureRecognizer) {
@@ -2349,7 +2566,7 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
         selectedShapeAnnotation = annotation
         selectedShapePage = page
         PDFTextAnnotator.syncControllerStyle(from: annotation, into: parent.controller)
-        parent.controller.selectEditableObject(label: "Text")
+        parent.controller.selectEditableObject(label: PDFTextAnnotator.isCorrection(annotation) ? "Correction" : "Text")
     }
 
     private func applyTextStyleToSelectedAnnotation() {
@@ -2361,7 +2578,7 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
         page.addAnnotation(annotation)
         selectedShapeAnnotation = annotation
         selectedShapePage = page
-        parent.controller.selectEditableObject(label: "Text")
+        parent.controller.selectEditableObject(label: PDFTextAnnotator.isCorrection(annotation) ? "Correction" : "Text")
         parent.controller.drawingVersion += 1
         parent.controller.objectWillChange.send()
         refreshPDFDisplay()
@@ -2419,6 +2636,7 @@ final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDele
     }
 
     private func editableLabel(for annotation: PDFAnnotation) -> String {
+        if PDFTextAnnotator.isCorrection(annotation) { return "Correction" }
         if isSwiftPDFText(annotation) { return "Text" }
         return "Shape"
     }
@@ -2505,7 +2723,9 @@ enum PDFTextAnnotator {
     static func addOrUpdateText(_ text: String, target: TextTarget, document: PDFDocument?, controller: PDFEditorController) -> PDFAnnotation? {
         guard let document, let page = document.page(at: target.pageIndex) else { return nil }
 
-        let font = makeFont(
+        let correction = target.mode == .correction || target.annotation.map { isCorrection($0) } == true
+
+        let font = font(
             family: controller.textFontFamily,
             size: controller.textSize,
             bold: controller.textBold,
@@ -2520,37 +2740,44 @@ enum PDFTextAnnotator {
         let width = max(40, measured.width + padding * 2)
         let height = max(24, measured.height + padding * 1.5)
 
+        let correctionBounds = target.sourceBounds.map {
+            $0.insetBy(dx: -3, dy: -2)
+        }
         let anchor = target.annotation.map {
             CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)
+        } ?? correctionBounds.map {
+            CGPoint(x: $0.midX, y: $0.midY)
         } ?? target.point
-        var origin = CGPoint(x: anchor.x - width * 0.5, y: anchor.y - height * 0.5)
+        let targetWidth = max(width, correctionBounds?.width ?? (correction ? 120 : 0))
+        let targetHeight = max(height, correctionBounds?.height ?? (correction ? 28 : 0))
+        var origin = CGPoint(x: anchor.x - targetWidth * 0.5, y: anchor.y - targetHeight * 0.5)
         let pageBounds = page.bounds(for: .mediaBox)
-        origin.x = max(pageBounds.minX + 4, min(origin.x, pageBounds.maxX - width - 4))
-        origin.y = max(pageBounds.minY + 4, min(origin.y, pageBounds.maxY - height - 4))
+        origin.x = max(pageBounds.minX + 4, min(origin.x, pageBounds.maxX - targetWidth - 4))
+        origin.y = max(pageBounds.minY + 4, min(origin.y, pageBounds.maxY - targetHeight - 4))
 
         if let annotation = target.annotation {
             annotation.font = font
             annotation.fontColor = color
-            annotation.color = .clear
+            annotation.color = correction ? UIColor(controller.correctionBackgroundColor) : .clear
             annotation.alignment = .left
             annotation.contents = text
-            annotation.userName = textUserName(controller: controller)
-            annotation.bounds = CGRect(origin: origin, size: CGSize(width: width, height: height))
+            annotation.userName = textUserName(controller: controller, correction: correction)
+            annotation.bounds = CGRect(origin: origin, size: CGSize(width: targetWidth, height: targetHeight))
             annotation.shouldDisplay = true
             annotation.shouldPrint = true
             return annotation
         } else {
             let annotation = PDFAnnotation(
-                bounds: CGRect(origin: origin, size: CGSize(width: width, height: height)),
+                bounds: CGRect(origin: origin, size: CGSize(width: targetWidth, height: targetHeight)),
                 forType: .freeText,
                 withProperties: nil
             )
             annotation.font = font
             annotation.fontColor = color
-            annotation.color = .clear
+            annotation.color = correction ? UIColor(controller.correctionBackgroundColor) : .clear
             annotation.alignment = .left
             annotation.contents = text
-            annotation.userName = textUserName(controller: controller)
+            annotation.userName = textUserName(controller: controller, correction: correction)
             annotation.shouldDisplay = true
             annotation.shouldPrint = true
             page.addAnnotation(annotation)
@@ -2560,7 +2787,8 @@ enum PDFTextAnnotator {
 
     static func applyCurrentStyle(to annotation: PDFAnnotation, controller: PDFEditorController) {
         let text = annotation.contents ?? ""
-        let font = makeFont(
+        let correction = isCorrection(annotation)
+        let font = font(
             family: controller.textFontFamily,
             size: controller.textSize,
             bold: controller.textBold,
@@ -2568,9 +2796,9 @@ enum PDFTextAnnotator {
         )
         annotation.font = font
         annotation.fontColor = UIColor(controller.textColor)
-        annotation.color = .clear
+        annotation.color = correction ? UIColor(controller.correctionBackgroundColor) : .clear
         annotation.alignment = .left
-        annotation.userName = textUserName(controller: controller)
+        annotation.userName = textUserName(controller: controller, correction: correction)
         annotation.shouldDisplay = true
         annotation.shouldPrint = true
 
@@ -2599,24 +2827,87 @@ enum PDFTextAnnotator {
         if let color = annotation.fontColor {
             controller.textColor = Color(color)
         }
+        if isCorrection(annotation) {
+            controller.correctionBackgroundColor = Color(correctionBackgroundColor(for: annotation))
+        }
         controller.textStrikethrough = textStyleFlag("strike", in: annotation)
     }
 
-    private static func makeFont(family: TextFontFamily, size: CGFloat, bold: Bool, italic: Bool) -> UIFont {
+    nonisolated static func font(family: TextFontFamily, size: CGFloat, bold: Bool, italic: Bool) -> UIFont {
         let base: UIFont
         switch family {
         case .system:
             base = UIFont.systemFont(ofSize: size, weight: bold ? .bold : .regular)
-        case .serif:
-            if bold, italic {
-                base = UIFont(name: "TimesNewRomanPS-BoldItalicMT", size: size) ?? UIFont.boldSystemFont(ofSize: size)
-            } else if bold {
-                base = UIFont(name: "TimesNewRomanPS-BoldMT", size: size) ?? UIFont.boldSystemFont(ofSize: size)
-            } else if italic {
-                base = UIFont(name: "TimesNewRomanPS-ItalicMT", size: size) ?? UIFont.italicSystemFont(ofSize: size)
-            } else {
-                base = UIFont(name: "TimesNewRomanPSMT", size: size) ?? UIFont.systemFont(ofSize: size)
-            }
+        case .helvetica:
+            base = namedFont(
+                regular: "Helvetica",
+                bold: "Helvetica-Bold",
+                italic: "Helvetica-Oblique",
+                boldItalic: "Helvetica-BoldOblique",
+                size: size,
+                wantsBold: bold,
+                wantsItalic: italic
+            )
+        case .arial:
+            base = namedFont(
+                regular: "ArialMT",
+                bold: "Arial-BoldMT",
+                italic: "Arial-ItalicMT",
+                boldItalic: "Arial-BoldItalicMT",
+                size: size,
+                wantsBold: bold,
+                wantsItalic: italic
+            )
+        case .timesNewRoman, .serif:
+            base = namedFont(
+                regular: "TimesNewRomanPSMT",
+                bold: "TimesNewRomanPS-BoldMT",
+                italic: "TimesNewRomanPS-ItalicMT",
+                boldItalic: "TimesNewRomanPS-BoldItalicMT",
+                size: size,
+                wantsBold: bold,
+                wantsItalic: italic
+            )
+        case .georgia:
+            base = namedFont(
+                regular: "Georgia",
+                bold: "Georgia-Bold",
+                italic: "Georgia-Italic",
+                boldItalic: "Georgia-BoldItalic",
+                size: size,
+                wantsBold: bold,
+                wantsItalic: italic
+            )
+        case .avenir:
+            base = namedFont(
+                regular: "AvenirNext-Regular",
+                bold: "AvenirNext-DemiBold",
+                italic: "AvenirNext-Italic",
+                boldItalic: "AvenirNext-DemiBoldItalic",
+                size: size,
+                wantsBold: bold,
+                wantsItalic: italic
+            )
+        case .futura:
+            base = namedFont(
+                regular: "Futura-Medium",
+                bold: "Futura-Bold",
+                italic: "Futura-MediumItalic",
+                boldItalic: "Futura-Bold",
+                size: size,
+                wantsBold: bold,
+                wantsItalic: italic
+            )
+        case .courier:
+            base = namedFont(
+                regular: "Courier",
+                bold: "Courier-Bold",
+                italic: "Courier-Oblique",
+                boldItalic: "Courier-BoldOblique",
+                size: size,
+                wantsBold: bold,
+                wantsItalic: italic
+            )
         case .rounded:
             let descriptor = UIFont.systemFont(ofSize: size, weight: bold ? .bold : .regular).fontDescriptor
             let roundedDescriptor = descriptor.withDesign(.rounded) ?? descriptor
@@ -2634,10 +2925,38 @@ enum PDFTextAnnotator {
         return UIFont(descriptor: descriptor, size: size)
     }
 
-    private static func family(for font: UIFont) -> TextFontFamily {
+    nonisolated private static func namedFont(
+        regular: String,
+        bold: String,
+        italic: String,
+        boldItalic: String,
+        size: CGFloat,
+        wantsBold: Bool,
+        wantsItalic: Bool
+    ) -> UIFont {
+        let name: String
+        if wantsBold && wantsItalic {
+            name = boldItalic
+        } else if wantsBold {
+            name = bold
+        } else if wantsItalic {
+            name = italic
+        } else {
+            name = regular
+        }
+        return UIFont(name: name, size: size) ?? UIFont.systemFont(ofSize: size, weight: wantsBold ? .bold : .regular)
+    }
+
+    nonisolated static func family(for font: UIFont) -> TextFontFamily {
         let name = font.fontName.lowercased()
-        if name.contains("mono") || name.contains("courier") { return .mono }
-        if name.contains("times") || name.contains("serif") { return .serif }
+        if name.contains("helvetica") { return .helvetica }
+        if name.contains("arial") { return .arial }
+        if name.contains("times") { return .timesNewRoman }
+        if name.contains("georgia") { return .georgia }
+        if name.contains("avenir") { return .avenir }
+        if name.contains("futura") { return .futura }
+        if name.contains("courier") { return .courier }
+        if name.contains("mono") { return .mono }
         if font.fontDescriptor.object(forKey: .face) as? String == "UICTFontTextStyleBody" { return .system }
         return .system
     }
@@ -2649,14 +2968,226 @@ enum PDFTextAnnotator {
             .contains { $0 == "\(key)=1" }
     }
 
-    private static func textUserName(controller: PDFEditorController) -> String {
-        [
+    static func isCorrection(_ annotation: PDFAnnotation) -> Bool {
+        guard let userName = annotation.userName else { return false }
+        return userName
+            .split(separator: "|")
+            .contains { $0 == "correction=1" }
+    }
+
+    static func correctionBackgroundColor(for annotation: PDFAnnotation) -> UIColor {
+        guard let userName = annotation.userName,
+              let value = userName
+                .split(separator: "|")
+                .first(where: { $0.hasPrefix("background=") })?
+                .split(separator: "=", maxSplits: 1)
+                .last else {
+            return annotation.color == .clear ? .white : annotation.color
+        }
+        return color(fromHex: String(value)) ?? .white
+    }
+
+    private static func textUserName(controller: PDFEditorController, correction: Bool) -> String {
+        var parts = [
             "SwiftPDFText",
             "font=\(controller.textFontFamily.rawValue)",
             "bold=\(controller.textBold ? 1 : 0)",
             "italic=\(controller.textItalic ? 1 : 0)",
             "strike=\(controller.textStrikethrough ? 1 : 0)"
-        ].joined(separator: "|")
+        ]
+        if correction {
+            parts.append("correction=1")
+            parts.append("background=\(hexColor(UIColor(controller.correctionBackgroundColor)))")
+        }
+        return parts.joined(separator: "|")
+    }
+
+    private static func hexColor(_ color: UIColor) -> String {
+        let resolved = color.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
+        var red: CGFloat = 1
+        var green: CGFloat = 1
+        var blue: CGFloat = 1
+        var alpha: CGFloat = 1
+        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return String(
+            format: "%02X%02X%02X",
+            Int(round(red * 255)),
+            Int(round(green * 255)),
+            Int(round(blue * 255))
+        )
+    }
+
+    private static func color(fromHex value: String) -> UIColor? {
+        guard value.count == 6, let number = UInt64(value, radix: 16) else { return nil }
+        return UIColor(
+            red: CGFloat((number >> 16) & 0xFF) / 255,
+            green: CGFloat((number >> 8) & 0xFF) / 255,
+            blue: CGFloat(number & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+}
+
+enum FontIdentifier {
+    static func embeddedFontResult(from selection: PDFSelection) -> FontIdentificationResult? {
+        guard let attributed = selection.attributedString, attributed.length > 0 else { return nil }
+        var detectedFont: UIFont?
+        attributed.enumerateAttribute(.font, in: NSRange(location: 0, length: attributed.length)) { value, _, stop in
+            if let font = value as? UIFont {
+                detectedFont = font
+                stop.pointee = true
+            }
+        }
+        guard let font = detectedFont else { return nil }
+        let traits = font.fontDescriptor.symbolicTraits
+        return FontIdentificationResult(
+            detectedName: font.fontName,
+            closestFamily: PDFTextAnnotator.family(for: font),
+            size: font.pointSize,
+            bold: traits.contains(.traitBold),
+            italic: traits.contains(.traitItalic),
+            isEmbeddedFont: true
+        )
+    }
+
+    nonisolated static func scannedFontResult(
+        in image: UIImage,
+        near normalizedPoint: CGPoint,
+        pageHeight: CGFloat? = nil
+    ) async -> FontIdentificationResult? {
+        await Task.detached(priority: .userInitiated) {
+            identifyScannedFont(in: image, near: normalizedPoint, pageHeight: pageHeight)
+        }.value
+    }
+
+    nonisolated private static func identifyScannedFont(
+        in image: UIImage,
+        near normalizedPoint: CGPoint,
+        pageHeight: CGFloat?
+    ) -> FontIdentificationResult? {
+        guard let cgImage = image.cgImage else { return nil }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        guard (try? handler.perform([request])) != nil,
+              let observations = request.results,
+              let observation = closestObservation(to: normalizedPoint, in: observations),
+              let recognized = observation.topCandidates(1).first,
+              !recognized.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let crop = crop(image: cgImage, normalizedBounds: observation.boundingBox) else {
+            return nil
+        }
+
+        guard let sourcePrint = featurePrint(for: crop) else { return nil }
+        var best: (family: TextFontFamily, bold: Bool, italic: Bool, distance: Float)?
+        let styles = [(false, false), (true, false), (false, true), (true, true)]
+
+        let candidateFamilies: [TextFontFamily] = [
+            .system, .helvetica, .arial, .timesNewRoman, .georgia,
+            .avenir, .futura, .courier, .rounded, .mono
+        ]
+        for family in candidateFamilies {
+            for (bold, italic) in styles {
+                guard let candidate = renderedSample(
+                    recognized.string,
+                    family: family,
+                    bold: bold,
+                    italic: italic,
+                    matching: crop.size
+                ), let candidatePrint = featurePrint(for: candidate) else { continue }
+                var distance: Float = 0
+                try? sourcePrint.computeDistance(&distance, to: candidatePrint)
+                if best == nil || distance < best!.distance {
+                    best = (family, bold, italic, distance)
+                }
+            }
+        }
+
+        guard let best else { return nil }
+        let estimatedSize = max(
+            8,
+            min(72, observation.boundingBox.height * (pageHeight ?? CGFloat(cgImage.height)) * 0.78)
+        )
+        return FontIdentificationResult(
+            detectedName: recognized.string,
+            closestFamily: best.family,
+            size: estimatedSize,
+            bold: best.bold,
+            italic: best.italic,
+            isEmbeddedFont: false
+        )
+    }
+
+    nonisolated private static func closestObservation(
+        to point: CGPoint,
+        in observations: [VNRecognizedTextObservation]
+    ) -> VNRecognizedTextObservation? {
+        observations.min { lhs, rhs in
+            distance(from: point, to: lhs.boundingBox) < distance(from: point, to: rhs.boundingBox)
+        }
+    }
+
+    nonisolated private static func distance(from point: CGPoint, to rect: CGRect) -> CGFloat {
+        let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
+        let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
+        return dx * dx + dy * dy
+    }
+
+    nonisolated private static func crop(image: CGImage, normalizedBounds: CGRect) -> UIImage? {
+        let expanded = normalizedBounds.insetBy(dx: -0.012, dy: -0.025).intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        let rect = CGRect(
+            x: expanded.minX * CGFloat(image.width),
+            y: (1 - expanded.maxY) * CGFloat(image.height),
+            width: expanded.width * CGFloat(image.width),
+            height: expanded.height * CGFloat(image.height)
+        ).integral
+        guard rect.width > 4, rect.height > 4, let cropped = image.cropping(to: rect) else { return nil }
+        return UIImage(cgImage: cropped)
+    }
+
+    nonisolated private static func renderedSample(
+        _ text: String,
+        family: TextFontFamily,
+        bold: Bool,
+        italic: Bool,
+        matching sourceSize: CGSize
+    ) -> UIImage? {
+        guard sourceSize.width > 4, sourceSize.height > 4 else { return nil }
+        let scale = min(1, 512 / sourceSize.width, 160 / sourceSize.height)
+        let size = CGSize(width: max(16, sourceSize.width * scale), height: max(16, sourceSize.height * scale))
+        let horizontalPadding = max(2, size.width * 0.02)
+        let verticalPadding = max(2, size.height * 0.06)
+        var pointSize = size.height
+        var font = PDFTextAnnotator.font(family: family, size: pointSize, bold: bold, italic: italic)
+        let available = CGSize(width: size.width - horizontalPadding * 2, height: size.height - verticalPadding * 2)
+        let measured = (text as NSString).size(withAttributes: [.font: font])
+        if measured.width > 0, measured.height > 0 {
+            pointSize *= min(available.width / measured.width, available.height / measured.height)
+            font = PDFTextAnnotator.font(family: family, size: max(4, pointSize), bold: bold, italic: italic)
+        }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            let finalSize = (text as NSString).size(withAttributes: [.font: font])
+            let origin = CGPoint(
+                x: max(horizontalPadding, (size.width - finalSize.width) * 0.5),
+                y: max(verticalPadding, (size.height - finalSize.height) * 0.5)
+            )
+            (text as NSString).draw(at: origin, withAttributes: [.font: font, .foregroundColor: UIColor.black])
+        }
+    }
+
+    nonisolated private static func featurePrint(for image: UIImage) -> VNFeaturePrintObservation? {
+        guard let cgImage = image.cgImage else { return nil }
+        let request = VNGenerateImageFeaturePrintRequest()
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        guard (try? handler.perform([request])) != nil else { return nil }
+        return request.results?.first as? VNFeaturePrintObservation
     }
 }
 
@@ -2783,6 +3314,10 @@ enum PDFExporter {
                 guard drawRect.width > 0, drawRect.height > 0 else { continue }
                 guard drawRect.maxX >= 0, drawRect.minX <= pageRect.width else { continue }
                 guard drawRect.maxY >= 0, drawRect.minY <= pageRect.height else { continue }
+                if PDFTextAnnotator.isCorrection(annotation) {
+                    PDFTextAnnotator.correctionBackgroundColor(for: annotation).setFill()
+                    UIRectFill(drawRect)
+                }
                 (text as NSString).draw(in: drawRect, withAttributes: attributes)
             }
         }

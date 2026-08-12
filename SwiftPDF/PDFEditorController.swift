@@ -14,6 +14,19 @@ import Combine
 enum EditorTool {
     case draw
     case text
+    case correctText
+    case identifyFont
+}
+
+struct FontIdentificationResult: Identifiable, Sendable {
+    let id = UUID()
+    let detectedName: String
+    let closestFamily: TextFontFamily
+    let size: CGFloat
+    let bold: Bool
+    let italic: Bool
+    let isEmbeddedFont: Bool
+    var matchFound = true
 }
 
 enum DrawingToolType: String, CaseIterable {
@@ -22,8 +35,15 @@ enum DrawingToolType: String, CaseIterable {
     case eraser = "eraser"
 }
 
-enum TextFontFamily: String, CaseIterable {
+enum TextFontFamily: String, CaseIterable, Sendable {
     case system = "System"
+    case helvetica = "Helvetica"
+    case arial = "Arial"
+    case timesNewRoman = "Times New Roman"
+    case georgia = "Georgia"
+    case avenir = "Avenir Next"
+    case futura = "Futura"
+    case courier = "Courier"
     case serif = "Serif"
     case rounded = "Rounded"
     case mono = "Mono"
@@ -57,6 +77,7 @@ final class PDFEditorController: ObservableObject {
     @Published var drawingTool: DrawingToolType = .pen
     @Published var selectedColor: Color = .black
     @Published var textColor: Color = .black
+    @Published var correctionBackgroundColor: Color = .white
     @Published var textSize: CGFloat = 16
     @Published var textFontFamily: TextFontFamily = .system
     @Published var textBold = false
@@ -80,6 +101,8 @@ final class PDFEditorController: ObservableObject {
     @Published var exportCompressionQuality: CGFloat = 1.0
     @Published var hasSelectedEditableObject = false
     @Published var selectedEditableObjectLabel = ""
+    @Published var isIdentifyingFont = false
+    @Published var fontIdentificationResult: FontIdentificationResult?
 
     let signatureStore = SignatureStore()
     let profileStore = UserProfileStore.shared
@@ -118,6 +141,7 @@ final class PDFEditorController: ObservableObject {
         drawingTool = .pen
         selectedColor = .black
         textColor = .black
+        correctionBackgroundColor = .white
         textSize = 16
         textFontFamily = .system
         textBold = false
@@ -131,6 +155,8 @@ final class PDFEditorController: ObservableObject {
         currentCanvasSize = .zero
         isPerformingOCR = false
         extractedText = nil
+        isIdentifyingFont = false
+        fontIdentificationResult = nil
         showingSignatureLibrary = false
         showingSignaturePad = false
         showingPageManager = false
@@ -151,6 +177,7 @@ final class PDFEditorController: ObservableObject {
         drawingTool = .pen
         selectedColor = .black
         textColor = .black
+        correctionBackgroundColor = .white
         textSize = 16
         textFontFamily = .system
         textBold = false
@@ -164,6 +191,8 @@ final class PDFEditorController: ObservableObject {
         currentCanvasSize = .zero
         isPerformingOCR = false
         extractedText = nil
+        isIdentifyingFont = false
+        fontIdentificationResult = nil
         showingSignatureLibrary = false
         showingSignaturePad = false
         showingPageManager = false
@@ -222,10 +251,18 @@ final class PDFEditorController: ObservableObject {
 
     func setTool(_ tool: EditorTool) {
         activeTool = tool
-        if tool == .text {
+        if tool == .text || tool == .correctText || tool == .identifyFont {
             isDrawingActive = false
         }
         clearEditableObjectSelection()
+    }
+
+    func applyFontIdentification(_ result: FontIdentificationResult) {
+        textFontFamily = result.closestFamily
+        textSize = result.size
+        textBold = result.bold
+        textItalic = result.italic
+        applyTextStyleToSelectedObject()
     }
 
     func setDrawingTool(_ tool: DrawingToolType) {

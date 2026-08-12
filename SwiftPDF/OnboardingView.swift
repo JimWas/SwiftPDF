@@ -113,8 +113,8 @@ private struct OnboardingPage {
             symbol: "pencil.and.outline",
             color: .blue,
             title: "Open and Edit",
-            detail: "Tap Open PDF, choose a document from Files, then use the editor toolbar to draw, add text, insert images, and manage pages.",
-            tips: ["Pinch to zoom and swipe between pages", "Save or share when you are finished"]
+            detail: "Tap Open PDF, choose a document from Files, then use the editor toolbar to draw, add text, correct existing text or dates, insert images, and manage pages.",
+            tips: ["Open Text Tools and choose Correct Text or Date", "Use Identify Font to match the original style", "Save or share when you are finished"]
         ),
         OnboardingPage(
             symbol: "signature",

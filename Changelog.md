@@ -10,6 +10,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Typed PDF signatures with Classic, Elegant, Casual, Flourish, Bold, and Modern writing styles.
 - Live signature previews that let separate signers select visibly different styles.
+- Text and date correction mode with automatic word detection for selectable PDFs.
+- Movable and resizable correction boxes for scanned or flattened PDFs.
+- Common document fonts including Helvetica, Arial, Times New Roman, Georgia, Avenir Next, Futura, and Courier.
+- Custom correction background colors for matching nonwhite PDF pages.
+- On device font identification using embedded PDF metadata or OCR based visual matching for scans.
 
 ### Changed
 
